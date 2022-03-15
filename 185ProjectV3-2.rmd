@@ -1,0 +1,132 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(readr)
+library(dplyr)
+library(gt)
+library(arsenal)
+library(ggplot2)
+library(ggpubr)
+```
+
+Import Raw Dataset
+
+```{r}
+export <- read_csv("C:/Users/thuds/Dropbox (Dartmouth College)/QBS185_CapPrep/archive/export.csv", 
+                   col_types = cols(age = col_integer(), checkin_date = col_date(format = "%Y-%m-%d")))
+
+head(export)
+fl<-export
+```
+
+Remove users with only one data entry
+
+```{r}
+fl<-export
+fl<-fl[duplicated(fl$user_id),]
+
+```
+
+Grouping by symptoms and weather
+
+```{r}
+#Select only symptoms trackable-tag
+fl_symptoms <- fl[fl$trackable_type=='Symptom',]
+
+#remove entrys where one user logged multiple symptoms in one day
+us<-duplicated(fl_symptoms[,c(1,5)]) 
+fl_symptoms<-fl_symptoms[!us,]
+
+#create another data frame with just weather tag 
+fl_weather <-fl[fl$trackable_type=='Weather',]
+
+
+
+#fl_Treatment <-fl[fl$trackable_type=='Treatment',]
+#fl_Tag <-fl[fl$trackable_type=='Tag',]
+#fl_Food <-fl[fl$trackable_type=='Food',]
+```
+
+```{r}
+##join syptoms with weather table
+
+fl_merge<- inner_join(x=fl_symptoms ,y=fl_weather, by = c('user_id' = 'user_id', 'checkin_date'= 'checkin_date'), na_matches = 'never', keep= F)
+
+```
+
+```{r}
+#write_csv(fl_merge, 'weatherANDsymptoms_byuserdate.csv')
+```
+
+part Two
+
+```{r}
+fl_merge<-read_csv("C:/Users/thuds/Dropbox (Dartmouth College)/QBS185_CapPrep/weatherANDsymptoms_byuserdate.csv")
+
+```
+
+Workable Data Frame
+
+```{r}
+weather_names<-unique(fl_merge$trackable_name.y) #every catagory under weather
+mer <- fl_symptoms[,c(1:5,8:9)]
+for (i in weather_names){
+  x<-fl_weather %>% filter(trackable_name == i)
+  x<-x[,c(1,5,9)]
+  mer <- inner_join(mer, x, by = c('user_id' = 'user_id', 'checkin_date'= 'checkin_date'), na_matches = 'never')
+  
+}
+
+names(mer)<-c('user_id','age', 'sex','country', 'checkin_date','Symptom_reported','symptom_value', 'icon', 'temperature_min', 'temperature_max', 'precip_intensity', 'pressure', 'humidity')
+
+head(mer)
+```
+
+```{r}
+#write.csv(mer, 'weatherbyuser_2.csv')
+```
+
+```{r}
+dat <- read_csv("C:/Users/thuds/Dropbox (Dartmouth College)/QBS185_CapPrep/weatherbyuser_2.csv", col_types = cols(...1 = col_skip(), checkin_date = col_date(format = "%Y-%m-%d")))
+```
+
+A sample of the pre-post clean-up and data wrangling process in tables
+
+```{r}
+fl[c(442:443,447,452),] %>% gt() %>%
+   tab_header(title = 'Orginal datset from flaredown app') %>%
+   tab_source_note('Table 1: Each row contains a single tackable input from a user.There are 7,976,223 rows of user check-ins ')
+ 
+ 
+dat[c(76:80),] %>% gt() %>%
+   tab_header(title = 'Weather and symptoms reported by same user and same data') %>%
+   tab_source_note('Table 2: Each row contains a all weather data and symptoms reporting by a user per day.There are 180,658 rows of user check-ins ')
+```
+
+Analysis of variables
+
+```{r}
+mer[,c(9:13)]<-apply(mer[,c(9:13)],2,as.numeric)
+mer2<-mer[,c(7,9:13)]
+
+table_one<-tableby(symptom_value~., data=mer2, numeric.stats = c( "meansd", "range"), total =F, test = FALSE)
+summary(table_one, digits=1, title = "Table 1: Summary by each symptom rating scale")
+```
+
+Histogram of Symptom value
+
+```{r}
+
+hist(as.numeric(mer$symptom_value),col=rgb(1,0,0,0.5), breaks = 5,main = "Histogram of Symptom Rating scale", xlab = 'Symptom Severity Rating')
+```
+
+```{r}
+x<-table(mer$icon, mer$symptom_value)
+legend.text=row.names(x)
+colors = brewer.pal(8,'Dark2')
+barplot(x, col = colors, horiz = F, beside = T, ylim=c(0,30000), main='Weather icon in relation to symtom reporting', ylab = 'Symptom Reporting Frequency', xlab = 'Symptom Rating')
+legend("topright",rownames(x),cex =0.8,fill=colors)
+```
